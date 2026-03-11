@@ -2,13 +2,18 @@
 .env.*
 !.env.example
 
+# youtube logins
+.youtube-cookie.json*
+
 __pycache__/
 *.pyc
 
-downloaded_*.mp4
+downloaded_*
 
 .venv/
 venv/
+
+.vscode
 
 # SSH/private keys
 *.pem
@@ -19,3 +24,6 @@ id_ecdsa
 id_ed25519
 
 GITHUB_SECURITY.md
+
+# database files
+*.db

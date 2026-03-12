@@ -13,10 +13,10 @@ ADMIN_USER_ID="[YourIDS]"
 ```
 
 ### Right now, the youtube cookie session is not working, but expect it
-Create a `.youtube-cookie.json` on root folder
+Create a `.youtube-cookie.txt` on root folder
 There you need copy your cookies session from youtube.
-__You can use Cookie Extractor for that.__
-just copy your cookies on that json and the code will update ur cookies
+__You can use Cookie.txt for that.__
+we recommend follow this [Instrucctions to update cookies](https://github.com/yt-dlp/yt-dlp/wiki/FAQ#how-do-i-pass-cookies-to-yt-dlp) and [This guide too for youtube perma cookies](https://github.com/yt-dlp/yt-dlp/wiki/Extractors#exporting-youtube-cookies)
 ## Run this
 
 ```sh

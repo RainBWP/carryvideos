@@ -3,7 +3,8 @@
 !.env.example
 
 # youtube logins
-.youtube-cookie.json*
+*cookie*
+*cookies*
 
 __pycache__/
 *.pyc

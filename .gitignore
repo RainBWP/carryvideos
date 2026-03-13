@@ -28,3 +28,8 @@ GITHUB_SECURITY.md
 
 # database files
 *.db
+
+# Media files
+media/
+*.png
+*.af

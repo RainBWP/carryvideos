@@ -46,6 +46,89 @@ def _build_youtube_opts(output_file: str, media_format: str) -> dict:
 
     return ydl_opts
 
+
+def _is_gif_info(info: dict) -> bool:
+    if not isinstance(info, dict):
+        return False
+
+    ext = str(info.get("ext", "")).lower()
+    if ext == "gif":
+        return True
+
+    requested_formats = info.get("requested_formats") or []
+    for requested in requested_formats:
+        if str(requested.get("ext", "")).lower() == "gif":
+            return True
+
+    return False
+
+
+def _probe_is_gif(url: str, ydl_opts: dict) -> bool:
+    probe_opts = dict(ydl_opts)
+    probe_opts["skip_download"] = True
+
+    with yt_dlp.YoutubeDL(probe_opts) as ydl:
+        info = ydl.extract_info(url, download=False)
+
+    if isinstance(info, dict) and info.get("_type") == "playlist":
+        entries = info.get("entries") or []
+        if not entries:
+            return False
+        info = entries[0]
+
+    return _is_gif_info(info)
+
+
+def _download_or_convert_gif(url: str, ydl_opts: dict, media_dir: Path = Path("media")) -> str:
+    media_dir.mkdir(parents=True, exist_ok=True)
+    output_base = media_dir / f"downloaded_{uuid.uuid4().hex}"
+
+    gif_scale_filter = "fps=10,scale=300:300:force_original_aspect_ratio=decrease:flags=lanczos"
+
+    if _probe_is_gif(url, ydl_opts):
+        direct_opts = dict(ydl_opts)
+        direct_opts["format"] = "best[ext=gif]/best"
+        direct_opts["outtmpl"] = str(output_base) + ".%(ext)s"
+        direct_opts.pop("postprocessors", None)
+        direct_opts.pop("postprocessor_args", None)
+        direct_opts.pop("merge_output_format", None)
+
+        with yt_dlp.YoutubeDL(direct_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+
+        if isinstance(info, dict) and info.get("_type") == "playlist":
+            entries = info.get("entries") or []
+            if entries:
+                info = entries[0]
+
+        downloaded_path = Path(str(output_base) + ".gif")
+        if isinstance(info, dict):
+            prepared = ydl.prepare_filename(info)
+            if prepared:
+                downloaded_path = Path(prepared)
+
+        if downloaded_path.suffix.lower() != ".gif":
+            return str(downloaded_path.with_suffix(".gif"))
+        return str(downloaded_path)
+
+    convert_opts = dict(ydl_opts)
+    convert_opts["format"] = "bestvideo/best"
+    convert_opts["outtmpl"] = str(output_base) + ".%(ext)s"
+    convert_opts.pop("merge_output_format", None)
+    convert_opts["postprocessors"] = [{
+        "key": "FFmpegVideoConvertor",
+        "preferedformat": "gif",
+    }]
+    convert_opts["postprocessor_args"] = [
+        "-vf",
+        gif_scale_filter,
+    ]
+
+    with yt_dlp.YoutubeDL(convert_opts) as ydl:
+        ydl.download([url])
+
+    return str(output_base.with_suffix(".gif"))
+
 def download_audio(url, codec="aac", quality="192", media_dir=Path("media")):
     media_dir.mkdir(parents=True, exist_ok=True)
     output_file = str(media_dir / f"downloaded_{uuid.uuid4().hex}")
@@ -110,15 +193,16 @@ def download_video_youtube(url, media_dir=Path("media")):
     return output_file
 
 def download_gif(url, media_dir=Path("media")):
-    media_dir.mkdir(parents=True, exist_ok=True)
-    output_file = str(media_dir / f"downloaded_{uuid.uuid4().hex}.gif")
+    """Download a direct GIF when available, otherwise convert to a compressed 300x300-max GIF."""
     ydl_opts = {
-        'format': 'best',
-        'outtmpl': output_file,
         'quiet': True,
         'nopart': True,
         'noplaylist': True,
     }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([url])
-    return output_file
+    return _download_or_convert_gif(url, ydl_opts, media_dir)
+
+
+def download_gif_youtube(url, media_dir=Path("media")):
+    """Download YouTube GIF directly when possible, otherwise convert to a compressed 300x300-max GIF."""
+    ydl_opts = _build_youtube_opts("", 'bestvideo/best')
+    return _download_or_convert_gif(url, ydl_opts, media_dir)

@@ -13,6 +13,9 @@ VIDEO_EXTENSIONS = {
 AUDIO_EXTENSIONS = {
     ".mp3", ".m4a", ".aac", ".wav", ".ogg", ".flac", ".opus",
 }
+GIF_EXTENSIONS = {
+    ".gif",
+}
 
 
 def _url_extension(url: str) -> str:
@@ -22,7 +25,7 @@ def _url_extension(url: str) -> str:
 
 def is_direct_media_url(url: str) -> bool:
     ext = _url_extension(url)
-    return ext in VIDEO_EXTENSIONS or ext in AUDIO_EXTENSIONS
+    return ext in VIDEO_EXTENSIONS or ext in AUDIO_EXTENSIONS or ext in GIF_EXTENSIONS
 
 
 def is_direct_audio_url(url: str) -> bool:
@@ -31,6 +34,10 @@ def is_direct_audio_url(url: str) -> bool:
 
 def is_direct_video_url(url: str) -> bool:
     return _url_extension(url) in VIDEO_EXTENSIONS
+
+
+def is_direct_gif_url(url: str) -> bool:
+    return _url_extension(url) in GIF_EXTENSIONS
 
 
 def download_direct_file(url: str, media_dir: Path = Path("media")) -> str:
@@ -101,5 +108,26 @@ def extract_audio_to_aac(input_file: str, media_dir: Path = Path("media"), bitra
     completed = subprocess.run(command, capture_output=True, text=True)
     if completed.returncode != 0:
         raise RuntimeError(f"ffmpeg audio extraction failed: {completed.stderr[-500:]}")
+
+    return str(output_file)
+
+
+def convert_video_to_gif(input_file: str, media_dir: Path = Path("media"), fps: int = 12, width: int = 480) -> str:
+    media_dir.mkdir(parents=True, exist_ok=True)
+    output_file = media_dir / f"downloaded_{uuid.uuid4().hex}.gif"
+
+    command = [
+        "ffmpeg",
+        "-y",
+        "-i",
+        input_file,
+        "-vf",
+        f"fps={fps},scale={width}:-1:flags=lanczos",
+        str(output_file),
+    ]
+
+    completed = subprocess.run(command, capture_output=True, text=True)
+    if completed.returncode != 0:
+        raise RuntimeError(f"ffmpeg gif conversion failed: {completed.stderr[-500:]}")
 
     return str(output_file)

@@ -39,6 +39,65 @@ def is_admin(user_id: int) -> bool:
     admin_id = os.getenv("ADMIN_USER_ID")
     return str(user_id) == admin_id
 
+async def export_gif_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Start interactive GIF export flow from /exportGif URL."""
+    user_id = update.effective_user.id
+    username = update.effective_user.username or "Unknown"
+    
+    if not db.check_user(user_id, username):
+        await update.message.reply_text(f"You are not authorized. Ask the admin to whitelist your ID: {user_id}")
+        return
+
+    if len(context.args) < 1:
+        await update.message.reply_text("Usage: /exportGif [URL]")
+        return
+
+    url = context.args[0].strip()
+
+    if not is_valid_url(url):
+        await update.message.reply_text("Please send a valid URL.")
+        return
+
+    await update.message.reply_text("Processing GIF export...")
+
+    file_path = None
+    try:
+        if wget.is_direct_gif_url(url):
+            await update.message.reply_text("Direct GIF link detected. Downloading...")
+            downloaded_path = await asyncio.to_thread(wget.download_direct_file, url, MEDIA_DIR)
+            file_path = downloaded_path
+        elif wget.is_direct_media_url(url):
+            await update.message.reply_text("Direct media link detected. Downloading and converting to GIF...")
+            downloaded_path = await asyncio.to_thread(wget.download_direct_file, url, MEDIA_DIR)
+
+            if wget.is_direct_audio_url(url):
+                await asyncio.to_thread(cleanup_download_file, downloaded_path)
+                await update.message.reply_text("Audio links cannot be exported as GIF.")
+                return
+            else:
+                gif_path = await asyncio.to_thread(wget.convert_video_to_gif, downloaded_path, MEDIA_DIR)
+                await asyncio.to_thread(cleanup_download_file, downloaded_path)
+                file_path = gif_path
+        elif check_url_is_youtube(url):
+            await update.message.reply_text("This could take a while...")
+            file_path = await asyncio.to_thread(ytdlp.download_gif_youtube, url, MEDIA_DIR)
+        else:
+            file_path = await asyncio.to_thread(ytdlp.download_gif, url, MEDIA_DIR)
+
+        await asyncio.to_thread(db.record_download, user_id, url, file_path)
+
+        with open(file_path, 'rb') as gif_file:
+            await update.message.reply_animation(animation=gif_file)
+
+        # Delete right away after Telegram confirms send.
+        await asyncio.to_thread(cleanup_download_file, file_path)
+        file_path = None
+    except Exception as e:
+        print(e)
+        await update.message.reply_text("Couldn't download this link. Please try another URL.")
+    finally:
+        await asyncio.to_thread(cleanup_download_file, file_path)
+
 async def extract_audio_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Start interactive audio extraction flow from /extractAudio URL."""
     user_id = update.effective_user.id
@@ -104,11 +163,11 @@ async def add_user_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(caller_id):
         return
 
-    if len(context.args) != 2:
-        await update.message.reply_text("Usage: /addUser [ID_User] [Password]")
+    if len(context.args) != 1:
+        await update.message.reply_text("Usage: /addUser [ID_User]")
         return
 
-    new_user_id_raw, provided_password = context.args
+    new_user_id_raw = context.args[0]
 
     try:
         new_user_id = int(new_user_id_raw)
@@ -226,6 +285,7 @@ def main():
     app.add_handler(CommandHandler("start", start_command))
     app.add_handler(CommandHandler("addUser", add_user_command))
     app.add_handler(CommandHandler("extractAudio", extract_audio_command))
+    app.add_handler(CommandHandler("exportGif", export_gif_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
     print("Bot is running...")
